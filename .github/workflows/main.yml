@@ -55,6 +55,14 @@ jobs:
           # deko3d (needed by daybreak/haze) lives in that same directory.
           make -C /tmp/libnx/nx install
 
+      # troposphere apps (daybreak, haze) use the switchbrew template where the
+      # .dksh shaders and the inner build/ make are sibling prerequisites; under
+      # -j the inner make links the .nro before uam has produced the shaders
+      # ("No rule to make target .../romfs/shaders/*.dksh"). Build them serially
+      # first; the parallel build below then finds them up to date.
+      - name: Build troposphere (serial)
+        run: make -C troposphere -j1 all
+
       - name: Build Atmosphere
         run: make -j"$(nproc)"
 
