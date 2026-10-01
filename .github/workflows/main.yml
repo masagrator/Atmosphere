@@ -51,9 +51,14 @@ jobs:
           git clone --depth 1 --branch master https://github.com/switchbrew/libnx.git /tmp/libnx
           echo "libnx commit: $(git -C /tmp/libnx rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
           make -C /tmp/libnx/nx -j"$(nproc)"
-          # Install over the image's libnx. Don't wipe $DEVKITPRO/libnx first:
-          # deko3d (needed by daybreak/haze) lives in that same directory.
+          # Remove the image's packaged libnx so no stale headers/libs survive.
+          # This only uses pacman's local DB (no network), and -Rdd removes just
+          # libnx's own files, leaving other packages in $DEVKITPRO/libnx intact.
+          dkp-pacman -Rdd --noconfirm libnx
           make -C /tmp/libnx/nx install
+          # Verify the installed library is the one we just built.
+          cmp /tmp/libnx/nx/lib/libnx.a "$DEVKITPRO/libnx/lib/libnx.a"
+          echo "Installed libnx master into $DEVKITPRO/libnx"
 
       # troposphere apps (daybreak, haze) use the switchbrew template where the
       # .dksh shaders and the inner build/ make are sibling prerequisites; under
