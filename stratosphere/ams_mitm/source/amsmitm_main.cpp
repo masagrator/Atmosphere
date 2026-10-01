@@ -45,7 +45,7 @@ namespace ams {
             ncm::Initialize();
 
             /* Verify that we can sanely execute. */
-            ams::CheckApiVersion();
+            //ams::CheckApiVersion();
         }
 
         void FinalizeSystemModule() { /* ... */ }
