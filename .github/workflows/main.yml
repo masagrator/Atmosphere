@@ -14,19 +14,18 @@ permissions:
 
 jobs:
   build:
-    name: Build (nx_release, libnx master)
+    name: Build (nx_release)
     runs-on: ubuntu-latest
 
     env:
       ATMOSPHERE_OUT: out/nintendo_nx_arm64_armv8a/release
-      # Every build step runs in a fresh container with the freshly built
-      # libnx master mounted over the image's /opt/devkitpro/libnx.
+      # Every build step runs in a fresh container of the build image, using the
+      # libnx that ships with devkitpro/devkita64:latest.
       # GIT_CONFIG_* marks the (runner-owned) workspace as safe for root's git,
       # which the build uses to derive its version string.
       DOCKER_RUN: >-
         docker run --rm
         -v ${{ github.workspace }}:/workspace
-        -v /tmp/libnx-install:/opt/devkitpro/libnx
         -w /workspace
         -e GIT_CONFIG_COUNT=1
         -e GIT_CONFIG_KEY_0=safe.directory
@@ -57,21 +56,6 @@ jobs:
               ln -sf /usr/bin/python3 /usr/local/bin/python && \
               rm -rf /var/lib/apt/lists/*
           EOF
-
-      - name: Clone libnx (master)
-        run: |
-          git clone --depth 1 https://github.com/switchbrew/libnx.git /tmp/libnx-src
-          echo "libnx commit: $(git -C /tmp/libnx-src rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
-          mkdir -p /tmp/libnx-install
-
-      - name: Build and install libnx
-        run: |
-          docker run --rm \
-            -v /tmp/libnx-src:/libnx-src \
-            -v /tmp/libnx-install:/libnx-out \
-            -w /libnx-src \
-            ams-builder \
-            bash -c 'make -j$(nproc) install && cp -a "$DEVKITPRO/libnx/." /libnx-out/'
 
       # troposphere apps (daybreak, haze) race under -j: the inner build/ make
       # links the .nro before uam has produced the romfs shaders. Build serially.
