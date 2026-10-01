@@ -16,60 +16,72 @@ jobs:
   build:
     name: Build (nx_release, libnx master)
     runs-on: ubuntu-latest
-    container:
-      # Always pulls the newest published devkitA64 toolchain image.
-      image: devkitpro/devkita64:latest
 
     env:
       ATMOSPHERE_OUT: out/nintendo_nx_arm64_armv8a/release
+      # Every build step runs in a fresh container with the freshly built
+      # libnx master mounted over the image's /opt/devkitpro/libnx.
+      # GIT_CONFIG_* marks the (runner-owned) workspace as safe for root's git,
+      # which the build uses to derive its version string.
+      DOCKER_RUN: >-
+        docker run --rm
+        -v ${{ github.workspace }}:/workspace
+        -v /tmp/libnx-install:/opt/devkitpro/libnx
+        -w /workspace
+        -e GIT_CONFIG_COUNT=1
+        -e GIT_CONFIG_KEY_0=safe.directory
+        -e GIT_CONFIG_VALUE_0=*
+        ams-builder
 
     steps:
-      # Note: no dkp-pacman here. pkg.devkitpro.org refuses CI runners (HTTP 403);
-      # the image already ships switch-tools, hactool and deko3d.
-      # git must exist before checkout so that a real .git directory is created
-      # (the build derives its version string from `git rev-parse`).
-      - name: Install build dependencies
-        run: |
-          apt-get update
-          apt-get install -y --no-install-recommends git zip python3 python3-lz4 ca-certificates
-          ln -sf /usr/bin/python3 /usr/local/bin/python
-
       - name: Checkout Atmosphere
         uses: actions/checkout@v7
 
+      # The build calls `git symbolic-ref HEAD`, which fails on a detached HEAD
+      # (e.g. pull_request merge commits). Put HEAD on a named local branch.
       - name: Prepare git metadata
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          # The build calls `git symbolic-ref HEAD`, which fails on a detached HEAD
-          # (e.g. pull_request merge commits). Put HEAD on a named local branch.
           if ! git symbolic-ref -q HEAD >/dev/null; then
             git checkout -B "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
           fi
 
-      - name: Build and install libnx (master)
+      # Newest devkitA64 image plus the few extra packages the build scripts need
+      # (no dkp-pacman: pkg.devkitpro.org returns 403 to CI runners).
+      - name: Prepare build image
         run: |
-          git clone --depth 1 --branch master https://github.com/switchbrew/libnx.git /tmp/libnx
-          echo "libnx commit: $(git -C /tmp/libnx rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
-          make -C /tmp/libnx/nx -j"$(nproc)"
-          # Remove the image's packaged libnx so no stale headers/libs survive.
-          # This only uses pacman's local DB (no network), and -Rdd removes just
-          # libnx's own files, leaving other packages in $DEVKITPRO/libnx intact.
-          dkp-pacman -Rdd --noconfirm libnx
-          make -C /tmp/libnx/nx install
-          # Verify the installed library is the one we just built.
-          cmp /tmp/libnx/nx/lib/libnx.a "$DEVKITPRO/libnx/lib/libnx.a"
-          echo "Installed libnx master into $DEVKITPRO/libnx"
+          docker pull devkitpro/devkita64:latest
+          docker build -t ams-builder - <<'EOF'
+          FROM devkitpro/devkita64:latest
+          RUN apt-get update && \
+              apt-get install -y --no-install-recommends git zip python3 python3-lz4 && \
+              ln -sf /usr/bin/python3 /usr/local/bin/python && \
+              rm -rf /var/lib/apt/lists/*
+          EOF
 
-      # troposphere apps (daybreak, haze) use the switchbrew template where the
-      # .dksh shaders and the inner build/ make are sibling prerequisites; under
-      # -j the inner make links the .nro before uam has produced the shaders
-      # ("No rule to make target .../romfs/shaders/*.dksh"). Build them serially
-      # first; the parallel build below then finds them up to date.
+      - name: Clone libnx (master)
+        run: |
+          git clone --depth 1 https://github.com/switchbrew/libnx.git /tmp/libnx-src
+          echo "libnx commit: $(git -C /tmp/libnx-src rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          mkdir -p /tmp/libnx-install
+
+      - name: Build and install libnx
+        run: |
+          docker run --rm \
+            -v /tmp/libnx-src:/libnx-src \
+            -v /tmp/libnx-install:/libnx-out \
+            -w /libnx-src \
+            ams-builder \
+            bash -c 'make -j$(nproc) install && cp -a "$DEVKITPRO/libnx/." /libnx-out/'
+
+      # troposphere apps (daybreak, haze) race under -j: the inner build/ make
+      # links the .nro before uam has produced the romfs shaders. Build serially.
       - name: Build troposphere (serial)
-        run: make -C troposphere -j1 all
+        run: $DOCKER_RUN make -C troposphere -j1 all
 
       - name: Build Atmosphere
-        run: make -j"$(nproc)"
+        run: |
+          $DOCKER_RUN make -j"$(nproc)"
+          sudo chown -R "$(id -u):$(id -g)" . # files created by the container's root user
 
       - name: Collect stratosphere KIPs
         run: |
