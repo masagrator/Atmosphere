@@ -1,0 +1,80 @@
+name: Build Atmosphere
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (nx_release, libnx master)
+    runs-on: ubuntu-latest
+    container:
+      # Always pulls the newest published devkitA64 toolchain image.
+      image: devkitpro/devkita64:latest
+
+    env:
+      ATMOSPHERE_OUT: out/nintendo_nx_arm64_armv8a/release
+
+    steps:
+      # Note: no dkp-pacman here. pkg.devkitpro.org refuses CI runners (HTTP 403);
+      # the image already ships switch-tools, hactool and deko3d.
+      # git must exist before checkout so that a real .git directory is created
+      # (the build derives its version string from `git rev-parse`).
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git zip python3 python3-lz4 ca-certificates
+          ln -sf /usr/bin/python3 /usr/local/bin/python
+
+      - name: Checkout Atmosphere
+        uses: actions/checkout@v7
+
+      - name: Prepare git metadata
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          # The build calls `git symbolic-ref HEAD`, which fails on a detached HEAD
+          # (e.g. pull_request merge commits). Put HEAD on a named local branch.
+          if ! git symbolic-ref -q HEAD >/dev/null; then
+            git checkout -B "${GITHUB_HEAD_REF:-$GITHUB_REF_NAME}"
+          fi
+
+      - name: Build and install libnx (master)
+        run: |
+          git clone --depth 1 --branch master https://github.com/switchbrew/libnx.git /tmp/libnx
+          echo "libnx commit: $(git -C /tmp/libnx rev-parse HEAD)" | tee -a "$GITHUB_STEP_SUMMARY"
+          make -C /tmp/libnx/nx -j"$(nproc)"
+          # Install over the image's libnx. Don't wipe $DEVKITPRO/libnx first:
+          # deko3d (needed by daybreak/haze) lives in that same directory.
+          make -C /tmp/libnx/nx install
+
+      - name: Build Atmosphere
+        run: make -j"$(nproc)"
+
+      - name: Collect stratosphere KIPs
+        run: |
+          mkdir -p /tmp/kips
+          find stratosphere -path "*/${ATMOSPHERE_OUT}/*.kip" -exec cp -v {} /tmp/kips/ \;
+          test -n "$(ls -A /tmp/kips)" || { echo "No KIP files found"; exit 1; }
+          ls -l /tmp/kips
+
+      - name: Upload Atmosphere build output
+        uses: actions/upload-artifact@v7
+        with:
+          name: atmosphere-${{ github.sha }}
+          path: ${{ env.ATMOSPHERE_OUT }}/*
+          if-no-files-found: error
+
+      - name: Upload stratosphere KIPs
+        uses: actions/upload-artifact@v7
+        with:
+          name: stratosphere-kips-${{ github.sha }}
+          path: /tmp/kips/*.kip
+          if-no-files-found: error
