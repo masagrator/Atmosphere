@@ -32,8 +32,6 @@ jobs:
         uses: actions/checkout@v7
         
       - name: Set target CPU
-        # Same flags as the Linux job; see the comment there.
-        working-directory: atmosphere
         run: |
           sed -i 's/-march=native/-march=${{ matrix.march }} -maes -funsigned-char/' libraries/config/arch/x64/cpu/generic_x64/cpu.mk
           cat libraries/config/arch/x64/cpu/generic_x64/cpu.mk
