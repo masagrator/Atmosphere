@@ -4,15 +4,6 @@ on:
   push:
   pull_request:
   workflow_dispatch:
-    inputs:
-      atmosphere_ref:
-        description: Atmosphère branch, tag or commit to build against
-        required: false
-        default: master
-
-env:
-  ATMOSPHERE_REPO: Atmosphere-NX/Atmosphere
-  ATMOSPHERE_REF: ${{ github.event.inputs.atmosphere_ref || 'master' }}
 
 jobs:
 
