@@ -38,5 +38,4 @@ jobs:
           gcc --version
 
       - name: Build libstratosphere
-        working-directory: atmosphere
         run: make -C libraries/libstratosphere -j"$(nproc)" win_x64_release
