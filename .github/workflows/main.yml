@@ -1,0 +1,53 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      atmosphere_ref:
+        description: Atmosphère branch, tag or commit to build against
+        required: false
+        default: master
+
+env:
+  ATMOSPHERE_REPO: Atmosphere-NX/Atmosphere
+  ATMOSPHERE_REF: ${{ github.event.inputs.atmosphere_ref || 'master' }}
+
+jobs:
+
+  windows:
+    name: Windows ${{ matrix.march }}
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        march: [x86-64-v2, x86-64-v3]
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            make
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-libjpeg-turbo
+
+      - name: Checkout Atmosphère
+        uses: actions/checkout@v7
+        
+      - name: Set target CPU
+        # Same flags as the Linux job; see the comment there.
+        working-directory: atmosphere
+        run: |
+          sed -i 's/-march=native/-march=${{ matrix.march }} -maes -funsigned-char/' libraries/config/arch/x64/cpu/generic_x64/cpu.mk
+          cat libraries/config/arch/x64/cpu/generic_x64/cpu.mk
+          gcc --version
+
+      - name: Build libstratosphere
+        working-directory: atmosphere
+        run: make -C libraries/libstratosphere -j"$(nproc)" win_x64_release
