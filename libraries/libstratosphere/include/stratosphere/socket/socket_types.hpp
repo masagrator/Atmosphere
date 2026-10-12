@@ -15,6 +15,7 @@
  */
 #pragma once
 #include <vapours.hpp>
+#include <ws2tcpip.h>
 
 namespace ams::socket {
 
