@@ -15,9 +15,6 @@
  */
 #pragma once
 #include <vapours.hpp>
-#if defined(ATMOSPHERE_OS_WINDOWS)
-#include <winsock2.h>
-#endif
 
 namespace ams::socket {
 
@@ -170,8 +167,13 @@ namespace ams::socket {
         int ai_family;
         int ai_socktype;
         int ai_protocol;
+        #if defined(ATMOSPHERE_OS_WINDOWS)
+        int ai_addrlen;
+        void* ai_addr;
+        #else
         socklen_t ai_addrlen;
         struct sockaddr *ai_addr;
+        #endif
         struct ares_addrinfo_node *ai_next;
     };
     
