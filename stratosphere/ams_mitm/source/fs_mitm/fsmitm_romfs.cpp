@@ -36,6 +36,11 @@ namespace ams::mitm::fs {
             };
 
             constexpr const ApplicationWithDynamicHeapInfo ApplicationsWithDynamicHeap[] = {
+                /* Danganronpa V3: Killing Harmony Anniversary Edition. */
+                /* Requirement ? MB. 16 MB stolen heap fixes a crash, though. */
+                /* Unknown heap sensitivity. */
+                { 0x010063F014176000,  16_MB, 0_MB },
+
                 /* Until Then. */
                 /* Requirement ~34 MB. */
                 /* No particular heap sensitivity. */
@@ -45,6 +50,13 @@ namespace ams::mitm::fs {
                 /* Requirement ? MB. 16 MB stolen heap fixes a crash, though. */
                 /* Unknown heap sensitivity. */
                 { 0x01002C9022770000,  16_MB, 0_MB },
+
+                /* Trails in the Sky 2nd Chapter (Global, Asia and Japan versions). */
+                /* Requirement ~16 MB.*/
+                /* No particular heap sensitivity. */
+                { 0x01007A2027548000,  8_MB, 0_MB },
+                { 0x0100E8B028B54000,  8_MB, 0_MB },
+                { 0x01002270268E0000,  8_MB, 0_MB },
 
                 /* STAR WARS: Knights of the Old Republic II: The Sith Lords. */
                 /* Requirement ? MB. 16 MB stolen heap fixes a crash, though. */
@@ -464,7 +476,7 @@ namespace ams::mitm::fs {
                         return entry;
                     }
             };
-
+            
             template<typename Entry>
             class TableWriter : public DynamicTableCache {
                 NON_COPYABLE(TableWriter);
@@ -717,12 +729,12 @@ namespace ams::mitm::fs {
             public:
                 DirectoryTableReader(ams::fs::IStorage *s, size_t ofs, size_t sz) : TableReader(s, ofs, sz) { /* ... */ }
         };
-
+        
         class FileTableReader : public TableReader<FileEntry> {
             public:
                 FileTableReader(ams::fs::IStorage *s, size_t ofs, size_t sz) : TableReader(s, ofs, sz) { /* ... */ }
         };
-
+        
         void Builder::VisitDirectory(BuildDirectoryContext *parent, u32 parent_offset, DirectoryTableReader &dir_table, FileTableReader &file_table) {
             const DirectoryEntry *parent_entry = dir_table.GetEntry(parent_offset);
             if (AMS_UNLIKELY(parent_entry == nullptr)) {
@@ -763,8 +775,7 @@ namespace ams::mitm::fs {
                 cur_child_offset = next_child_offset;
             }
         }
-
-
+        
         void Builder::AddSdFiles() {
             /* Open Sd Card filesystem. */
             FsFileSystem sd_filesystem;
